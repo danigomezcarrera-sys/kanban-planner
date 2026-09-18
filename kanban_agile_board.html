@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kanban Agile Board</title>
+<style>
+:root{--bg:#dfe4ea;--card:#fff;--text:#17202a;--muted:#667085;--line:#d9dee5;--accent:#2563eb;--danger:#dc2626;--success:#16a34a;--shadow:0 4px 14px rgba(16,24,40,.08)}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--text)}
+header{background:#17202a;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+h1{margin:0;font-size:22px}header small{opacity:.75}
+button{border:0;border-radius:8px;padding:9px 13px;cursor:pointer;font-weight:600;background:var(--accent);color:#fff}
+button.secondary{background:#eef2f6;color:#17202a}button.danger{background:var(--danger)}
+.toolbar{padding:14px 24px;background:#202d3a;border-bottom:1px solid #344454;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding:18px 24px}
+.metric{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;box-shadow:var(--shadow)}
+.metric b{display:block;font-size:23px;margin-top:4px}.metric span{color:var(--muted);font-size:12px}
+.board{display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:14px;padding:0 24px 24px;overflow-x:auto}
+.column{background:#344351;border-radius:12px;min-height:470px;padding:12px;border:1px solid #465665}
+.column h2{font-size:14px;margin:0 0 10px;display:flex;justify-content:space-between;color:#fff;font-weight:800}
+.cards{min-height:410px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;box-shadow:var(--shadow);cursor:grab}
+.card:active{cursor:grabbing}.card h3{font-size:14px;margin:0 0 7px}.meta{font-size:11px;color:#c2ccd6;display:flex;gap:6px;flex-wrap:wrap}.tag{background:#eef2ff;color:#3730a3;border-radius:999px;padding:3px 7px}.priority{font-weight:700}.priority-Alta{color:#b91c1c}.priority-Media{color:#b45309}.priority-Baja{color:#15803d}
+.card-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:11px}.points{font-weight:800}.blocked{color:var(--danger);font-weight:700}
+dialog{border:0;border-radius:14px;padding:0;width:min(650px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.25)}dialog::backdrop{background:rgba(0,0,0,.45)}
+.modal{padding:22px}.modal h2{margin-top:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}label{font-size:12px;font-weight:700;display:block}input,textarea,select{width:100%;margin-top:5px;padding:9px;border:1px solid var(--line);border-radius:7px;font:inherit}textarea{min-height:80px}.full{grid-column:1/-1}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.checks{display:grid;gap:7px;margin-top:8px}.check{font-size:12px;font-weight:400}.check input{width:auto;margin-right:7px}
+@media(max-width:900px){.metrics{grid-template-columns:repeat(2,1fr)}.board{grid-template-columns:repeat(4,260px)}} 
+.toolbar #wipLabel{color:#fff!important;font-weight:800;background:#17202a;padding:8px 12px;border-radius:7px;border:1px solid #46576a;letter-spacing:.1px}</style>
+</head>
+<body>
+<header>
+  <div><h1>Kanban Agile Board</h1><small>Historias de Usuario · Tareas · Planning Poker · WIP · Métricas</small></div>
+  <button onclick="openTask()">+ Nueva tarjeta</button>
+</header>
+
+<div class="toolbar">
+  <button class="secondary" onclick="configureWip()">⚙ Configurar WIP</button>
+  <button class="secondary" onclick="showMetrics()">📊 Métricas</button>
+  <button class="secondary" onclick="exportBoard()">🖼 Exportar board</button>
+  <button class="secondary" onclick="resetDemo()">↺ Restaurar demo</button>
+  <span id="wipLabel"></span>
+</div>
+
+<section class="metrics">
+  <div class="metric"><span>BACKLOG</span><b id="mBacklog">0</b></div>
+  <div class="metric"><span>PENDIENTE</span><b id="mPending">0</b></div>
+  <div class="metric"><span>EN PROCESO / WIP</span><b id="mProgress">0 / 3</b></div>
+  <div class="metric"><span>FINALIZADO</span><b id="mDone">0</b></div>
+  <div class="metric"><span>CYCLE TIME PROMEDIO</span><b id="mCycle">—</b></div>
+</section>
+
+<main class="board">
+  <section class="column" data-status="BACKLOG"><h2>BACKLOG <span class="count">0</span></h2><div class="cards"></div></section>
+  <section class="column" data-status="PENDIENTE"><h2>PENDIENTE <span class="count">0</span></h2><div class="cards"></div></section>
+  <section class="column" data-status="EN_PROCESO"><h2>EN PROCESO <span class="count">0</span></h2><div class="cards"></div></section>
+  <section class="column" data-status="FINALIZADO"><h2>FINALIZADO <span class="count">0</span></h2><div class="cards"></div></section>
+</main>
+
+<dialog id="taskDialog"><div class="modal">
+<h2 id="dialogTitle">Nueva tarjeta</h2>
+<form id="taskForm">
+<div class="grid">
+<label>ID único<input id="id" required placeholder="HU-001" readonly title="Se genera automáticamente según el tipo"></label>
+<label>Tipo<select id="type"><option>Historia de Usuario</option><option>Tarea</option><option>Bug</option><option>Mejora</option></select></label>
+<label class="full>Título<input id="title" required></label>
+<label class="full">Descripción<textarea id="description"></textarea></label>
+<label>Responsable<input id="owner"></label>
+<label>Prioridad<select id="priority"><option>Alta</option><option selected>Media</option><option>Baja</option></select></label>
+<label>Fecha límite<input id="due" type="date"></label>
+<label>Story Points<select id="points"><option>1</option><option>2</option><option>3</option><option selected>5</option><option>8</option><option>13</option><option>21</option></select></label>
+<label class="full">Etiquetas<input id="tags" placeholder="IA, API, Backend"></label>
+<label class="full">Criterios de aceptación<textarea id="acceptance" placeholder="Un criterio por línea"></textarea></label>
+<label class="full">Dependencias<input id="dependencies" placeholder="HU-002, HU-004"></label>
+</div>
+<div class="actions"><button type="button" class="secondary" onclick="taskDialog.close()">Cancelar</button><button>Guardar</button></div>
+</form></div></dialog>
+
+<dialog id="detailDialog"><div class="modal">
+<h2 id="detailTitle"></h2><div id="detailContent"></div>
+<div class="actions"><button class="danger" onclick="deleteCurrent()">Eliminar</button><button class="secondary" onclick="detailDialog.close()">Cerrar</button></div>
+</div></dialog>
+
+<script>
+const KEY="kanban_agile_board_v1";
+let config=JSON.parse(localStorage.getItem(KEY+"_config")||'{"wip":3}');
+let tasks=JSON.parse(localStorage.getItem(KEY)||"null")||[
+{id:"HU-001",type:"Historia de Usuario",title:"Registrar asistencia",description:"Permitir al docente registrar asistencia.",owner:"Equipo",priority:"Alta",due:"",points:5,tags:["Frontend"],acceptance:["Registrar presente/ausente","Guardar cambios"],dependencies:[],status:"PENDIENTE",created:Date.now()-86400000*5,start:null,done:null,dod:[false,false,false,false,false,false,false]},
+{id:"HU-002",type:"Historia de Usuario",title:"Carga y cálculo de notas",description:"Gestionar notas y promedios.",owner:"Equipo",priority:"Media",due:"",points:8,tags:["Backend","BD"],acceptance:["Cargar notas","Calcular promedio"],dependencies:[],status:"EN_PROCESO",created:Date.now()-86400000*4,start:Date.now()-86400000*2,done:null,dod:[true,true,false,false,false,false,true]},
+{id:"HU-003",type:"Historia de Usuario",title:"Asistente de IA",description:"Consultar al asistente sobre el programa.",owner:"Equipo",priority:"Alta",due:"",points:8,tags:["IA","API"],acceptance:["Enviar consulta","Recibir respuesta","Gestionar errores"],dependencies:["HU-002"],status:"BACKLOG",created:Date.now()-86400000*2,start:null,done:null,dod:[false,false,false,false,false,false,false]},
+{id:"HU-004",type:"Tarea",title:"Configurar repositorio",description:"Crear estructura inicial del proyecto.",owner:"Equipo",priority:"Baja",due:"",points:3,tags:["Git"],acceptance:["Repositorio creado"],dependencies:[],status:"FINALIZADO",created:Date.now()-86400000*8,start:Date.now()-86400000*7,done:Date.now()-86400000*5,dod:[true,true,true,true,true,true,true]}
+];
+let currentId=null;
+const statuses=["BACKLOG","PENDIENTE","EN_PROCESO","FINALIZADO"];
+function save(){localStorage.setItem(KEY,JSON.stringify(tasks));localStorage.setItem(KEY+"_config",JSON.stringify(config));render()}
+function render(){
+ statuses.forEach(s=>{const col=document.querySelector(`[data-status="${s}"] .cards`);col.innerHTML="";tasks.filter(t=>t.status===s).forEach(t=>col.appendChild(card(t)));document.querySelector(`[data-status="${s}"] .count`).textContent=tasks.filter(t=>t.status===s).length});
+ const p=tasks.filter(t=>t.status==="EN_PROCESO").length;
+ mBacklog.textContent=tasks.filter(t=>t.status==="BACKLOG").length;mPending.textContent=tasks.filter(t=>t.status==="PENDIENTE").length;mProgress.textContent=`${p} / ${config.wip}`;mDone.textContent=tasks.filter(t=>t.status==="FINALIZADO").length;
+ const cycles=tasks.filter(t=>t.start&&t.done).map(t=>(t.done-t.start)/86400000);mCycle.textContent=cycles.length?(cycles.reduce((a,b)=>a+b,0)/cycles.length).toFixed(1)+" d":"—";wipLabel.textContent=`WIP EN PROCESO: ${p}/${config.wip}`;
+}
+function card(t){
+ const d=document.createElement("article");d.className="card";d.draggable=true;d.dataset.id=t.id;
+ d.innerHTML=`<h3>${esc(t.id)} · ${esc(t.title)}</h3><div class="meta"><span class="priority priority-${esc(t.priority)}">${esc(t.priority)}</span><span>• ${esc(t.owner||"Sin asignar")}</span><span>• ${t.type}</span></div><div class="meta">${(t.tags||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join("")}</div><div class="card-footer"><span class="points">${t.points} SP</span><span>${t.status==="EN_PROCESO"?"⏳ En curso":t.status==="FINALIZADO"?"✓ Finalizado":"↔ Arrastrar"}</span></div>`;
+ d.addEventListener("dragstart",e=>e.dataTransfer.setData("text/plain",t.id));d.addEventListener("dblclick",()=>openDetail(t.id));return d;
+}
+document.querySelectorAll(".column").forEach(col=>{col.addEventListener("dragover",e=>e.preventDefault());col.addEventListener("drop",e=>{e.preventDefault();move(e.dataTransfer.getData("text/plain"),col.dataset.status)})});
+function move(id,status){
+ const t=tasks.find(x=>x.id===id);if(!t)return;
+ if(status==="EN_PROCESO"&&t.status!=="EN_PROCESO"&&tasks.filter(x=>x.status==="EN_PROCESO").length>=config.wip){alert(`WIP máximo alcanzado (${config.wip}). Finalizá o mové una tarjeta antes de iniciar otra.`);return}
+ if(status==="FINALIZADO"&&!t.dod.every(Boolean)){alert("No se puede pasar a FINALIZADO: la Definition of Done no está completa.");return}
+ const now=Date.now();if(status==="EN_PROCESO"&&!t.start)t.start=now;if(status==="FINALIZADO"&&!t.done)t.done=now;t.status=status;save();
+}
+function openTask(){
+ currentId=null;
+ taskForm.reset();
+ dialogTitle.textContent="Nueva tarjeta";
+ updateAutoId();
+ taskDialog.showModal();
+}
+const idPrefixByType = {
+ "Historia de Usuario": "HU",
+ "Tarea": "TAR",
+ "Bug": "BUG",
+ "Mejora": "MEJ"
+};
+
+function getNextId(typeName){
+ const prefix = idPrefixByType[typeName] || "TAR";
+ const numbers = tasks
+   .map(t => String(t.id || "").match(new RegExp("^" + prefix + "-(\\d+)$")))
+   .filter(Boolean)
+   .map(m => Number(m[1]));
+
+ const next = numbers.length ? Math.max(...numbers) + 1 : 1;
+ return `${prefix}-${String(next).padStart(3,"0")}`;
+}
+
+function updateAutoId(){
+ if(currentId) return;
+ id.value = getNextId(type.value);
+}
+
+type.addEventListener("change", updateAutoId);
+
+taskForm.onsubmit=e=>{e.preventDefault();const t={id:id.value.trim(),type:type.value,title:title.value.trim(),description:description.value,owner:owner.value,priority:priority.value,due:due.value,points:+points.value,tags:tags.value.split(",").map(x=>x.trim()).filter(Boolean),acceptance:acceptance.value.split("\\n").filter(Boolean),dependencies:dependencies.value.split(",").map(x=>x.trim()).filter(Boolean),status:"BACKLOG",created:Date.now(),start:null,done:null,dod:[false,false,false,false,false,false,false]};if(tasks.some(x=>x.id===t.id)){alert("El ID ya existe.");return}tasks.push(t);taskDialog.close();save()}
+function openDetail(id){currentId=id;const t=tasks.find(x=>x.id===id);detailTitle.textContent=`${t.id} · ${t.title}`;detailContent.innerHTML=`<p>${esc(t.description||"")}</p><p><b>Responsable:</b> ${esc(t.owner||"Sin asignar")} · <b>Prioridad:</b> ${esc(t.priority)} · <b>Story Points:</b> ${t.points}</p><p><b>Estado:</b> ${t.status}</p><h3>Definition of Done</h3><div class="checks">${["Desarrollo realizado","Pruebas verificadas","Revisión por otro integrante","Errores corregidos o registrados","Documentación actualizada","Cambios incorporados al repositorio","Criterios de aceptación cumplidos"].map((x,i)=>`<label class="check"><input type="checkbox" ${t.dod[i]?"checked":""} onchange="toggleDod(${i},this.checked)"> ${x}</label>`).join("")}</div><h3>Planning Poker</h3><p>Story Points actuales: <b>${t.points}</b></p>`;detailDialog.showModal()}
+function toggleDod(i,v){const t=tasks.find(x=>x.id===currentId);t.dod[i]=v;save();openDetail(currentId)}
+function deleteCurrent(){if(confirm("¿Eliminar esta tarjeta?")){tasks=tasks.filter(x=>x.id!==currentId);detailDialog.close();save()}}
+function configureWip(){const n=prompt("WIP máximo para EN PROCESO:",config.wip);if(n!==null&&Number(n)>0){config.wip=Number(n);save()}}
+function showMetrics(){const lead=tasks.filter(t=>t.created&&t.done).map(t=>(t.done-t.created)/86400000);const cycle=tasks.filter(t=>t.start&&t.done).map(t=>(t.done-t.start)/86400000);alert(`Lead Time promedio: ${avg(lead)} días\\nCycle Time promedio: ${avg(cycle)} días\\nThroughput: ${tasks.filter(t=>t.status==="FINALIZADO").length} tarjetas finalizadas\\nStory Points finalizados: ${tasks.filter(t=>t.status==="FINALIZADO").reduce((a,t)=>a+t.points,0)}`)}
+function avg(a){return a.length?(a.reduce((x,y)=>x+y,0)/a.length).toFixed(1):"—"}
+function exportBoard(){
+  // Exportación robusta: el alto de cada columna se calcula según la cantidad
+  // real de tarjetas, por lo que EN PROCESO no pierde tarjetas.
+  const W=1600, pad=34, gap=18, headerH=100, colY=150;
+  const colW=(W-pad*2-gap*3)/4;
+  const cardH=112, cardGap=12, colPad=12, colHeader=52;
+  const maxCards=Math.max(1,...["BACKLOG","PENDIENTE","EN_PROCESO","FINALIZADO"]
+    .map(st=>tasks.filter(t=>t.status===st).length));
+  const colH=Math.max(420, colHeader+maxCards*(cardH+cardGap)+colPad);
+  const H=colY+colH+55;
+
+  const bg="#202d3a", colBg="#2b3a49", cardBg="#ffffff", text="#17202a";
+  const escXml=v=>String(v??"")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+  const escText=v=>escXml(v).replace(/\n/g," ");
+  const statusMap=[
+    {key:"BACKLOG", label:"BACKLOG"},
+    {key:"PENDIENTE", label:"PENDIENTE"},
+    {key:"EN_PROCESO", label:"EN PROCESO"},
+    {key:"FINALIZADO", label:"FINALIZADO"}
+  ];
+  const priorityColor={Alta:"#b91c1c",Media:"#b45309",Baja:"#15803d"};
+
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="${bg}"/>
+    <text x="${pad}" y="45" fill="#fff" font-family="Arial,sans-serif" font-size="27" font-weight="700">Kanban Agile Board</text>
+    <text x="${pad}" y="72" fill="#d7e0e8" font-family="Arial,sans-serif" font-size="14">Historias de Usuario · Tareas · Planning Poker · WIP · Métricas</text>
+    <rect x="${W-310}" y="27" width="276" height="38" rx="8" fill="#17202a" stroke="#46576a"/>
+    <text x="${W-293}" y="52" fill="#fff" font-family="Arial,sans-serif" font-size="15" font-weight="700">WIP EN PROCESO: ${tasks.filter(t=>t.status==="EN_PROCESO").length}/${config.wip}</text>`;
+
+  statusMap.forEach((status,i)=>{
+    const x=pad+i*(colW+gap);
+    const list=tasks.filter(t=>t.status===status.key);
+
+    svg+=`<rect x="${x}" y="${colY}" width="${colW}" height="${colH}" rx="12" fill="${colBg}" stroke="#46576a"/>
+      <text x="${x+18}" y="${colY+30}" fill="#fff" font-family="Arial,sans-serif" font-size="16" font-weight="800">${status.label}</text>
+      <text x="${x+colW-24}" y="${colY+30}" text-anchor="end" fill="#fff" font-family="Arial,sans-serif" font-size="14" font-weight="700">${list.length}</text>`;
+
+    list.forEach((t,j)=>{
+      const cy=colY+colHeader+j*(cardH+cardGap);
+      svg+=`<rect x="${x+colPad}" y="${cy}" width="${colW-colPad*2}" height="${cardH}" rx="9" fill="${cardBg}" stroke="#d9dee5"/>
+        <text x="${x+27}" y="${cy+23}" fill="${text}" font-family="Arial,sans-serif" font-size="13" font-weight="700">${escText(t.id)} · ${escText(t.title).slice(0,54)}</text>
+        <text x="${x+27}" y="${cy+45}" fill="${priorityColor[t.priority]||"#475467"}" font-family="Arial,sans-serif" font-size="11" font-weight="700">${escText(t.priority)}</text>
+        <text x="${x+90}" y="${cy+45}" fill="#667085" font-family="Arial,sans-serif" font-size="11">• ${escText(t.owner||"Sin asignar").slice(0,28)}</text>
+        <text x="${x+27}" y="${cy+66}" fill="#3730a3" font-family="Arial,sans-serif" font-size="10">${escText((t.tags||[]).join(" · ")).slice(0,70)}</text>
+        <text x="${x+27}" y="${cy+88}" fill="${text}" font-family="Arial,sans-serif" font-size="11" font-weight="700">${escText(t.points)} SP</text>
+        <text x="${x+27}" y="${cy+106}" fill="#667085" font-family="Arial,sans-serif" font-size="10">${escText(t.type||"")}</text>`;
+    });
+  });
+
+  svg+=`<text x="${pad}" y="${H-22}" fill="#d7e0e8" font-family="Arial,sans-serif" font-size="12">Exportado desde Kanban Agile Board</text></svg>`;
+
+  const blob=new Blob([svg],{type:"image/svg+xml;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const img=new Image();
+
+  img.onload=()=>{
+    const scale=2, canvas=document.createElement("canvas");
+    canvas.width=W*scale; canvas.height=H*scale;
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle=bg;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    URL.revokeObjectURL(url);
+
+    canvas.toBlob(png=>{
+      if(!png){alert("No se pudo generar el PNG.");return;}
+      const a=document.createElement("a");
+      a.download=`kanban-board-${new Date().toISOString().slice(0,10)}.png`;
+      a.href=URL.createObjectURL(png);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    },"image/png");
+  };
+
+  img.onerror=()=>{
+    URL.revokeObjectURL(url);
+    alert("No se pudo exportar el board. Probá nuevamente en Chrome o Edge.");
+  };
+  img.src=url;
+}
+function resetDemo(){if(confirm("Restaurar las tarjetas de ejemplo?")){localStorage.removeItem(KEY);location.reload()}}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+render();
+</script>
+</body>
+</html>
